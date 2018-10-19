@@ -55,6 +55,7 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="ExceptionExtensions.cs" />
     <Compile Include="Resource.cs" />
     <Compile Include="Settings.cs" />
     <Compile Include="StringExtensions.cs" />

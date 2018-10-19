@@ -171,7 +171,7 @@ namespace FindUnusedResources
             }
             catch (AggregateException ae)
             {
-                if (ae.InnerExceptions?.All(IsPureCalceledException) == true)
+                if (ae.IsTypeOf<OperationCanceledException>())
                 {
                     status = "Task is cancelled";
                 }
@@ -188,17 +188,6 @@ namespace FindUnusedResources
                 IsProgressVisible = false;
                 ChangeAnalyzeCommandCanExecute(true);
             }
-        }
-
-        private static bool IsPureCalceledException(Exception i)
-        {
-            var isPure = true;
-            if (i is AggregateException e)
-            {
-                isPure &= e.InnerExceptions.All(IsPureCalceledException);
-                return isPure;
-            }
-            return i is OperationCanceledException;
         }
 
         private static void ShowErrorMessageBox(string message)
@@ -243,43 +232,57 @@ namespace FindUnusedResources
             var namePattern = new Regex(@"<data name=""(\w+)""");
             Parallel.ForEach(resourceFiles, file =>
             {
-                var fileName = file.Split("\\").Last();
-                fileName = fileName.Split(".").First();
-                var lines = File.ReadAllText(file).Split("</data>");
-                Parallel.ForEach(lines, line =>
-                {
-                    _cancellationTokenSource.Token.ThrowIfCancellationRequested();
-                    var matches = namePattern.Match(line);
-                    var name = matches.Success ? matches.Groups[1].Captures[0].Value : null;
-                    if (name != null)
-                    {
-                        var key = fileName + "." + name;
-                        _allResources[key] = new Resource(key);
-                    }
-                });
+                GetResourceKeys(file, namePattern);
             });
 
             Results = new ObservableCollection<Resource>(_allResources.Values);
+            CheckFiles(allFiles);
+        }
+
+        private void GetResourceKeys(string file, Regex namePattern)
+        {
+            var fileName = file.Split("\\").Last();
+            fileName = fileName.Split(".").First();
+            var lines = File.ReadAllText(file).Split("</data>");
+            Parallel.ForEach(lines, line =>
+            {
+                _cancellationTokenSource.Token.ThrowIfCancellationRequested();
+                var matches = namePattern.Match(line);
+                var name = matches.Success ? matches.Groups[1].Captures[0].Value : null;
+                if (name != null)
+                {
+                    var key = fileName + "." + name;
+                    _allResources[key] = new Resource(key);
+                }
+            });
+        }
+
+        private void CheckFiles(string[] allFiles)
+        {
             _totalFilesCount = allFiles.Length;
             Parallel.ForEach(allFiles, file =>
             {
-                var lines = File.ReadAllLines(file);
-                Parallel.ForEach(lines, line =>
-                {
-                    _cancellationTokenSource.Token.ThrowIfCancellationRequested();
-                    try
-                    {
-                        CheckLine(line);
-                    }
-                    catch (Exception e)
-                    {
-                        ShowErrorMessageBox(e.Message + Environment.NewLine + e.StackTrace);
-                    }
-                });
-
+                CheckLines(file);
                 _processedFiles++;
                 Status = _processedFiles + "/" + _totalFilesCount;
                 Progress = (double)_processedFiles * 100 / _totalFilesCount;
+            });
+        }
+
+        private void CheckLines(string file)
+        {
+            var lines = File.ReadAllLines(file);
+            Parallel.ForEach(lines, line =>
+            {
+                _cancellationTokenSource.Token.ThrowIfCancellationRequested();
+                try
+                {
+                    CheckLine(line);
+                }
+                catch (Exception e)
+                {
+                    ShowErrorMessageBox(e.Message + Environment.NewLine + e.StackTrace);
+                }
             });
         }
 
