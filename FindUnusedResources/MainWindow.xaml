@@ -36,37 +36,47 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <Label
-                Grid.Row="3"
+                Grid.Row="1"
                 Grid.Column="0"
                 Margin="0,5,0,0"
                 Content="File Extensions" />
             <TextBox
-                Grid.Row="3"
+                Grid.Row="1"
                 Grid.Column="1"
                 Margin="5,5,5,0"
                 Text="{Binding FileExtensions}" />
             <Label
-                Grid.Row="4"
+                Grid.Row="2"
                 Grid.Column="0"
                 Margin="0,5,0,0"
                 Content="Exclude Folders" />
             <TextBox
-                Grid.Row="4"
+                Grid.Row="2"
                 Grid.Column="1"
                 Margin="5,5,5,0"
                 Text="{Binding ExcludeFolders}" />
             <Label
-                Grid.Row="5"
+                Grid.Row="3"
                 Grid.Column="0"
                 Margin="0,5,0,0"
                 Content="Source File Directory" />
             <TextBox
-                Grid.Row="5"
+                Grid.Row="3"
                 Grid.Column="1"
                 Margin="5,5,5,0"
                 Text="{Binding SourceFilePath}" />
+            <Label
+                Grid.Row="4"
+                Grid.Column="0"
+                Margin="0,5,0,0"
+                Content="Exclude Files" />
+            <TextBox
+                Grid.Row="4"
+                Grid.Column="1"
+                Margin="5,5,5,0"
+                Text="{Binding ExcludeFiles}" />
             <StackPanel
-                Grid.Row="6"
+                Grid.Row="7"
                 Grid.Column="0"
                 Grid.ColumnSpan="2"
                 Margin="0,5,0,0"
@@ -79,7 +89,6 @@
                     Content="Analyze"
                     Command="{Binding AnalyzeCommand}" />
             </StackPanel>
-
         </Grid>
         <Border
             Grid.Row="1"

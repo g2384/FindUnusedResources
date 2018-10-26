@@ -8,6 +8,8 @@ namespace FindUnusedResources
 
         public string[] FileExtensions { get; set; }
 
+        public string[] ExcludeFiles { get; set; }
+
         public void Init()
         {
             FileExtensions = new[] { ".*" };

@@ -3,6 +3,7 @@ using Prism.Commands;
 using Prism.Mvvm;
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
@@ -44,7 +45,17 @@ namespace FindUnusedResources
 
             _sourceFilePath = Settings.SourceFilePath;
             _fileExtensions = string.Join("; ", Settings.FileExtensions);
-            _excludeFolders = "\"" + string.Join("\"; \"", Settings.ExcludeFolders) + "\"";
+            _excludeFolders = ConvertArrayToString(Settings.ExcludeFolders);
+            _excludeFiles = ConvertArrayToString(Settings.ExcludeFiles);
+        }
+
+        private string ConvertArrayToString(string[] array)
+        {
+            if (array?.Any() != true)
+            {
+                return "";
+            }
+            return "\"" + string.Join("\"; \"", array) + "\"";
         }
 
         private DelegateCommand _analyzeCommand;
@@ -107,6 +118,14 @@ namespace FindUnusedResources
         {
             get => _excludeFolders;
             set => SetProperty(ref _excludeFolders, value);
+        }
+
+        private string _excludeFiles;
+
+        public string ExcludeFiles
+        {
+            get => _excludeFiles;
+            set => SetProperty(ref _excludeFiles, value);
         }
 
         private bool _isAnalyzeButtonEnabled = true;
@@ -228,7 +247,7 @@ namespace FindUnusedResources
             }
             _allResources = new ConcurrentDictionary<string, Resource>();
             var allFiles = GetAllFiles(path, Settings.FileExtensions);
-            var resourceFiles = GetAllFiles(path, new[] { ".resx" });
+            var resourceFiles = GetAllResourceFiles(path);
             var namePattern = new Regex(@"<data name=""(\w+)""");
             Parallel.ForEach(resourceFiles, file =>
             {
@@ -239,14 +258,28 @@ namespace FindUnusedResources
             CheckFiles(allFiles);
         }
 
+        private string[] GetAllResourceFiles(string path)
+        {
+            var allFiles = GetAllFiles(path, new[] { ".resx" });
+            var excludeFiles = Settings.ExcludeFiles.Select(e => "\\" + e).ToArray();
+            return allFiles.Where(e => !excludeFiles.Any(e.EndsWith)).ToArray();
+        }
+
         private void GetResourceKeys(string file, Regex namePattern)
         {
             var fileName = file.Split("\\").Last();
             fileName = fileName.Split(".").First();
-            var lines = File.ReadAllText(file).Split("</data>");
+            var text = File.ReadAllText(file);
+            text = new Regex("<!--(.*?)-->", RegexOptions.Singleline).Replace(text, ""); // remove comments
+            var lines = text.Split("</data>");
+            var token = _cancellationTokenSource.Token;
             Parallel.ForEach(lines, line =>
             {
-                _cancellationTokenSource.Token.ThrowIfCancellationRequested();
+                if (token.IsCancellationRequested)
+                {
+                    token.ThrowIfCancellationRequested();
+                }
+
                 var matches = namePattern.Match(line);
                 var name = matches.Success ? matches.Groups[1].Captures[0].Value : null;
                 if (name != null)
@@ -272,9 +305,14 @@ namespace FindUnusedResources
         private void CheckLines(string file)
         {
             var lines = File.ReadAllLines(file);
+            var token = _cancellationTokenSource.Token;
             Parallel.ForEach(lines, line =>
             {
-                _cancellationTokenSource.Token.ThrowIfCancellationRequested();
+                if (token.IsCancellationRequested)
+                {
+                    token.ThrowIfCancellationRequested();
+                }
+
                 try
                 {
                     CheckLine(line);
@@ -305,18 +343,24 @@ namespace FindUnusedResources
         private void SaveSettings()
         {
             Settings.SourceFilePath = SourceFilePath;
-            if (!string.IsNullOrWhiteSpace(ExcludeFolders))
-            {
-                var extensions = ExcludeFolders.Substring(1, ExcludeFolders.Length - 2);
-                Settings.ExcludeFolders = new Regex(@""";\s+""").Split(extensions).Where(i => !string.IsNullOrWhiteSpace(i)).ToArray();
-            }
-
+            Settings.ExcludeFolders = ConvertToArray(ExcludeFolders);
+            Settings.ExcludeFiles = ConvertToArray(ExcludeFiles);
             if (!string.IsNullOrWhiteSpace(FileExtensions))
             {
                 Settings.FileExtensions = new Regex(@"[^\*\.\w]+").Split(FileExtensions).Where(i => !string.IsNullOrWhiteSpace(i)).ToArray();
             }
 
             File.WriteAllText(SettingFile, JsonConvert.SerializeObject(Settings, Formatting.Indented));
+        }
+
+        private string[] ConvertToArray(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return new string[0];
+            }
+            var extensions = text.Substring(1, text.Length - 2);
+            return new Regex(@""";\s+""").Split(extensions).Where(i => !string.IsNullOrWhiteSpace(i)).ToArray();
         }
     }
 }
