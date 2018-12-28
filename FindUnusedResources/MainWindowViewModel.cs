@@ -249,13 +249,15 @@ namespace FindUnusedResources
             var allFiles = GetAllFiles(path, Settings.FileExtensions);
             var resourceFiles = GetAllResourceFiles(path);
             var namePattern = new Regex(@"<data name=""(\w+)""");
+            var resourceDesignerFiles = resourceFiles.Select(e => e.Replace(".resx", ".Designer.cs")).ToArray();
             Parallel.ForEach(resourceFiles, file =>
             {
                 GetResourceKeys(file, namePattern);
             });
 
+            var filteredAllFiles = allFiles.Except(resourceDesignerFiles).Except(resourceDesignerFiles).ToArray();
             Results = new ObservableCollection<Resource>(_allResources.Values);
-            CheckFiles(allFiles);
+            CheckFiles(filteredAllFiles);
         }
 
         private string[] GetAllResourceFiles(string path)
@@ -290,9 +292,9 @@ namespace FindUnusedResources
             });
         }
 
-        private void CheckFiles(string[] allFiles)
+        private void CheckFiles(IReadOnlyCollection<string> allFiles)
         {
-            _totalFilesCount = allFiles.Length;
+            _totalFilesCount = allFiles.Count;
             Parallel.ForEach(allFiles, file =>
             {
                 CheckLines(file);
