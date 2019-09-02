@@ -74,6 +74,27 @@ namespace FindUnusedResources
             Status = "Canceling";
         }
 
+        private bool _showUnusedOnly;
+
+        public bool ShowUnusedOnly
+        {
+            get => _showUnusedOnly;
+            set
+            {
+                if (SetProperty(ref _showUnusedOnly, value))
+                {
+                    if (value)
+                    {
+                        Results = new ObservableCollection<Resource>(_allResults.Where(e => e.Count == 0));
+                    }
+                    else
+                    {
+                        Results = new ObservableCollection<Resource>(_allResults);
+                    }
+                }
+            }
+        }
+
         private string _sourceFilePath;
 
         public string SourceFilePath
@@ -137,6 +158,8 @@ namespace FindUnusedResources
             get => _isProgressVisible;
             set => SetProperty(ref _isProgressVisible, value);
         }
+
+        private IList<Resource> _allResults;
 
         private ObservableCollection<Resource> _results;
 
@@ -257,6 +280,8 @@ namespace FindUnusedResources
 
             var filteredAllFiles = allFiles.Except(resourceDesignerFiles).Except(resourceDesignerFiles).ToArray();
             Results = new ObservableCollection<Resource>(_allResources.Values);
+            _allResults = _allResources.Values.ToList();
+            ShowUnusedOnly = false;
             CheckFiles(filteredAllFiles);
         }
 
@@ -306,9 +331,9 @@ namespace FindUnusedResources
 
         private void CheckLines(string file)
         {
-            var lines = File.ReadAllLines(file);
+            var lines = File.ReadAllLines(file).Where(e => !string.IsNullOrWhiteSpace(e)).ToArray();
             var token = _cancellationTokenSource.Token;
-            Parallel.ForEach(lines, line =>
+            Parallel.ForEach(Results, r =>
             {
                 if (token.IsCancellationRequested)
                 {
@@ -317,7 +342,14 @@ namespace FindUnusedResources
 
                 try
                 {
-                    CheckLine(line);
+                    var name = r.Name;
+                    foreach (var line in lines)
+                    {
+                        if (line.Contains(name))
+                        {
+                            r.Count++;
+                        }
+                    }
                 }
                 catch (Exception e)
                 {
@@ -329,17 +361,6 @@ namespace FindUnusedResources
         private string[] GetAllFiles(string path, string[] fileExtensions)
         {
             return FileHelper.GetAllFiles(path, fileExtensions, Settings.ExcludeFolders);
-        }
-
-        private void CheckLine(string line)
-        {
-            Parallel.ForEach(Results, r =>
-            {
-                if (line.Contains(r.Name))
-                {
-                    r.Count++;
-                }
-            });
         }
 
         private void SaveSettings()
