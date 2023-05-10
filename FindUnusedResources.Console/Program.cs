@@ -19,15 +19,15 @@
         {
             Settings = GetSettings(args);
 
-            if (string.IsNullOrEmpty(Settings.SourceFilePath))
+            if (string.IsNullOrEmpty(Settings.SourceCodeFolderPath))
             {
-                Console.WriteLine(nameof(Settings.SourceFilePath) + " cannot be empty");
+                Console.WriteLine(nameof(Settings.SourceCodeFolderPath) + " cannot be empty");
                 return;
             }
 
-            var resourceFilePath = GetAllResourceFiles(Settings.SourceFilePath);
+            var resourceFilePath = GetAllResourceFiles(Settings.SourceCodeFolderPath);
             var resourceDesignerFiles = resourceFilePath.Select(e => e.Replace(".resx", ".Designer.cs")).ToArray();
-            var allFiles = GetAllFiles(Settings.SourceFilePath, Settings.FileExtensions);
+            var allFiles = GetAllFiles(Settings.SourceCodeFolderPath, Settings.FileExtensions);
             var codeFiles = allFiles.Except(resourceFilePath).Except(resourceDesignerFiles).ToArray();
 
             var unusedVariables = new List<Resource>();
@@ -47,7 +47,7 @@
                 var usages = model.GetAllResxReferences();
                 if (usages.Any())
                 {
-                    var friendlyFilePath = filePath.Replace(Settings.SourceFilePath, "");
+                    var friendlyFilePath = filePath.Replace(Settings.SourceCodeFolderPath, "");
                     foreach (var resource in resxResources)
                     {
                         var count = usages.Count(e => e.Equals(resource));
@@ -106,33 +106,27 @@
             var deserializer = new DeserializerBuilder().WithNamingConvention(CamelCaseNamingConvention.Instance).Build();
             var serializer = new SerializerBuilder().WithNamingConvention(CamelCaseNamingConvention.Instance).Build();
 
-            if (args.Length == 0)
+            string settingsFile = args.Any() ? args[0] : DefaultSettingsFile;
+            if (!File.Exists(settingsFile))
             {
-                if (File.Exists(DefaultSettingsFile))
-                {
-                    var text = File.ReadAllText(DefaultSettingsFile);
-                    settings = deserializer.Deserialize<Settings>(text);
-                }
-                else
-                {
-                    settings = new Settings();
-                    File.WriteAllText(DefaultSettingsFile, serializer.Serialize(settings));
-                }
+                Console.WriteLine($"Failed to find file: {settingsFile}.");
+                settingsFile = DefaultSettingsFile;
+            }
+
+            if (File.Exists(settingsFile))
+            {
+                var text = File.ReadAllText(settingsFile);
+                settings = deserializer.Deserialize<Settings>(text);
+                Console.WriteLine($"Read settings from: {settingsFile}.");
             }
             else
             {
-                if (File.Exists(args[0]))
-                {
-                    var text = File.ReadAllText(DefaultSettingsFile);
-                    settings = deserializer.Deserialize<Settings>(text);
-                }
-                else
-                {
-                    settings = new Settings();
-                    File.WriteAllText(DefaultSettingsFile, serializer.Serialize(settings));
-                }
+                settings = new Settings();
+                File.WriteAllText(DefaultSettingsFile, serializer.Serialize(settings));
+                Console.WriteLine($"Created setting file: {settingsFile}.");
             }
 
+            Console.WriteLine();
             return settings;
         }
 

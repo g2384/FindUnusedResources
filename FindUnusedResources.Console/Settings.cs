@@ -2,7 +2,7 @@ namespace FindUnusedResources.Console
 {
     public class Settings
     {
-        public string SourceFilePath { get; set; }
+        public string SourceCodeFolderPath { get; set; }
 
         public string[] ExcludeFolders { get; set; } = new[] { @"\obj\", @"\bin\" };
 
