@@ -2,95 +2,158 @@
 {
     using Microsoft.CodeAnalysis;
     using Microsoft.CodeAnalysis.CSharp;
-    using Microsoft.CodeAnalysis.CSharp.Syntax;
     using System;
-    using System.Collections.Immutable;
+    using System.Collections.Generic;
+    using System.IO;
+    using System.Linq;
+    using YamlDotNet.Serialization;
+    using YamlDotNet.Serialization.NamingConventions;
 
     internal class Program
     {
+        private const string DefaultSettingsFile = "settings.yaml";
+
+        private static Settings Settings;
+
         static void Main(string[] args)
         {
-            string stringsFilePath = @"";
-            string[] codeFiles = Directory.GetFiles(@"", "*.cs", SearchOption.AllDirectories);
+            Settings = GetSettings(args);
 
-            SyntaxTree stringsTree = CSharpSyntaxTree.ParseText(File.ReadAllText(stringsFilePath));
-            SemanticModel stringsModel = CSharpCompilation.Create("temp.dll", syntaxTrees: new[] { stringsTree }).GetSemanticModel(stringsTree);
-
-            var unusedVariables = new List<string>();
-
-            var descendantNodes = stringsTree.GetRoot().DescendantNodes().ToArray();
-
-            var classProperty = descendantNodes.OfType<ClassDeclarationSyntax>().ToArray();
-            if(classProperty.Length > 1)
+            if (string.IsNullOrEmpty(Settings.SourceFilePath))
             {
-                throw new InvalidOperationException();
+                Console.WriteLine(nameof(Settings.SourceFilePath) + " cannot be empty");
+                return;
             }
 
-            var className = classProperty.Single().Identifier.Text;
+            var resourceFilePath = GetAllResourceFiles(Settings.SourceFilePath);
+            var resourceDesignerFiles = resourceFilePath.Select(e => e.Replace(".resx", ".Designer.cs")).ToArray();
+            var allFiles = GetAllFiles(Settings.SourceFilePath, Settings.FileExtensions);
+            var codeFiles = allFiles.Except(resourceFilePath).Except(resourceDesignerFiles).ToArray();
 
-            IEnumerable<PropertyDeclarationSyntax> stringProperties = stringsTree.GetRoot().DescendantNodes().OfType<PropertyDeclarationSyntax>();
+            var unusedVariables = new List<Resource>();
 
-            var resourceStrings = new List<string>();
-            foreach (PropertyDeclarationSyntax property in stringProperties)
+            var resxResources = new List<ResxResource>();
+            foreach (var file in resourceDesignerFiles)
             {
-                ISymbol symbol = stringsModel.GetDeclaredSymbol(property);
-
-                if (symbol == null || !symbol.Kind.Equals(SymbolKind.Property)) continue; // Skip if it's not a property
-                if (!property.Modifiers.Any(SyntaxKind.InternalKeyword) || !property.Modifiers.Any(SyntaxKind.StaticKeyword) || !property.Type.ToString().Equals("string")) continue; // Skip if it's not an internal static string property
-                resourceStrings.Add($"{className}.{property.Identifier.Text}");
+                var strings = ResourceConverter.GetResourceStrings(file);
+                resxResources.AddRange(strings);
             }
 
-            foreach (string filePath in codeFiles)
+            foreach (var filePath in codeFiles)
             {
-                if (filePath.Equals(stringsFilePath)) continue;
+                var tree = CSharpSyntaxTree.ParseText(File.ReadAllText(filePath));
+                var model = CSharpCompilation.Create("temp.dll", syntaxTrees: new[] { tree }).GetSemanticModel(tree);
 
-                SyntaxTree tree = CSharpSyntaxTree.ParseText(File.ReadAllText(filePath));
-                SemanticModel model = CSharpCompilation.Create("temp.dll", syntaxTrees: new[] { tree }).GetSemanticModel(tree);
-
-                var usages = model.GetAllResxStrings();
-                foreach (var s in resourceStrings)
+                var usages = model.GetAllResxReferences();
+                if (usages.Any())
                 {
-                    if (!usages.Contains(s))
+                    var friendlyFilePath = filePath.Replace(Settings.SourceFilePath, "");
+                    foreach (var resource in resxResources)
                     {
-                        unusedVariables.Add(s);
+                        var count = usages.Count(e => e.Equals(resource));
+                        if (count > 0)
+                        {
+                            resource.References.Add(new Reference
+                            {
+                                ClassName = "",
+                                Count = count,
+                                FileName = friendlyFilePath
+                            });
+                        }
                     }
                 }
             }
 
-            if (unusedVariables.Any())
+            PrintResults(resxResources);
+        }
+
+        private static void PrintResults(List<ResxResource> resxResources)
+        {
+            var unusedResources = resxResources.Where(e => !e.References.Any()).ToArray();
+            if (unusedResources.Any())
             {
-                Console.WriteLine("The following variables are unused:");
-                foreach (string variable in unusedVariables)
+                Console.WriteLine("Unused resources:");
+                Console.WriteLine();
+                foreach (var resource in unusedResources)
                 {
-                    Console.WriteLine(variable);
+                    Console.WriteLine("  " + resource.ToShortString());
+                }
+            }
+
+            if (unusedResources.Length < resxResources.Count)
+            {
+                Console.WriteLine();
+                Console.WriteLine("Stats of other resources:");
+                foreach (var resource in resxResources)
+                {
+                    if (resource.References.Any())
+                    {
+                        Console.WriteLine();
+                        Console.WriteLine("  " + resource.ToShortString() + $" ({resource.References.Sum(e => e.Count)})");
+                        foreach (var reference in resource.References)
+                        {
+                            Console.WriteLine("    " + reference.ToString());
+                        }
+                    }
+                }
+            }
+        }
+
+        private static Settings GetSettings(string[] args)
+        {
+            Settings settings;
+
+            var deserializer = new DeserializerBuilder().WithNamingConvention(CamelCaseNamingConvention.Instance).Build();
+            var serializer = new SerializerBuilder().WithNamingConvention(CamelCaseNamingConvention.Instance).Build();
+
+            if (args.Length == 0)
+            {
+                if (File.Exists(DefaultSettingsFile))
+                {
+                    var text = File.ReadAllText(DefaultSettingsFile);
+                    settings = deserializer.Deserialize<Settings>(text);
+                }
+                else
+                {
+                    settings = new Settings();
+                    File.WriteAllText(DefaultSettingsFile, serializer.Serialize(settings));
                 }
             }
             else
             {
-                Console.WriteLine("No unused variables found.");
-            }
-        }
-    }
-
-    public static class SematicModelExtensions
-    {
-        public static string[] GetAllResxStrings(this SemanticModel model)
-        {
-            var matched = new List<string>();
-            var desendantNodes = model.SyntaxTree.GetRoot().DescendantNodes().ToArray();
-            foreach (var node in desendantNodes)
-            {
-                if (node is MemberAccessExpressionSyntax m)
+                if (File.Exists(args[0]))
                 {
-                    if (m.Expression is IdentifierNameSyntax e)
-                    {
-                        var name = e.ToString();
-                        var value = m.Name.ToString();
-                        matched.Add($"{name}.{value}");
-                    }
+                    var text = File.ReadAllText(DefaultSettingsFile);
+                    settings = deserializer.Deserialize<Settings>(text);
+                }
+                else
+                {
+                    settings = new Settings();
+                    File.WriteAllText(DefaultSettingsFile, serializer.Serialize(settings));
                 }
             }
-            return matched.ToArray();
+
+            return settings;
+        }
+
+        private static string[] GetAllFiles(string path, string[] fileExtensions)
+        {
+            return FileHelper.GetAllFiles(path, fileExtensions, Settings.ExcludeFolders);
+        }
+
+        private static string[] GetAllResourceFiles(string path)
+        {
+            var allFiles = GetAllFiles(path, new[] { ".resx" });
+            string[] excludedFiles;
+            if (Settings.ExcludeResxFiles == null)
+            {
+                excludedFiles = Array.Empty<string>();
+            }
+            else
+            {
+                excludedFiles = Settings.ExcludeResxFiles.Select(e => "\\" + e).ToArray();
+            }
+            return allFiles.Where(e => !excludedFiles.Any(e.EndsWith)).ToArray();
         }
     }
 }
