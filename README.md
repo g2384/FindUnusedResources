@@ -38,3 +38,8 @@ This legacy desktop version is no longer maintained.
 - [ ] use `Microsoft.CodeAnalysis` to analyse xaml (View) files;
 - [ ] split code to a library project that can be shared by both console and desktop version;
 - [ ] support both CodeAnalysis mode and string matching mode;
+
+## Similar projects:
+
+- [dotnet/ResXResourceManager](https://github.com/dotnet/ResXResourceManager)
+- [RandomEngy/RESX-Unused-Finder](https://github.com/RandomEngy/RESX-Unused-Finder) (no longer maintained)
