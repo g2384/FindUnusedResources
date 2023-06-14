@@ -37,8 +37,7 @@
             var resourceStrings = new List<ResxResource>();
             foreach (var property in stringProperties)
             {
-                if (!property.Modifiers.Any(SyntaxKind.InternalKeyword)
-                    || !property.Modifiers.Any(SyntaxKind.StaticKeyword)
+                if (!property.Modifiers.Any(SyntaxKind.StaticKeyword)
                     || !property.Type.ToString().Equals("string", StringComparison.OrdinalIgnoreCase))
                 {
                     continue; // Skip if it's not an internal static string property
