@@ -70,14 +70,18 @@
         private static void PrintResults(List<ResxResource> resxResources)
         {
             var unusedResources = resxResources.Where(e => !e.References.Any()).ToArray();
+            Console.WriteLine("Unused resources:");
+            Console.WriteLine();
             if (unusedResources.Any())
             {
-                Console.WriteLine("Unused resources:");
-                Console.WriteLine();
                 foreach (var resource in unusedResources)
                 {
                     Console.WriteLine("  " + resource.ToShortString());
                 }
+            }
+            else
+            {
+                Console.WriteLine("  <None>");
             }
 
             if (unusedResources.Length < resxResources.Count)
